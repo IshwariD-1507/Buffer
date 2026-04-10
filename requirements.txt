@@ -1,0 +1,7 @@
+osmnx
+networkx
+folium
+streamlit
+streamlit-folium
+numpy
+pandas
