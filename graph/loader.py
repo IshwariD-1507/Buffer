@@ -5,6 +5,7 @@ import os
 def download_city(city_name="Pune, India", network_type="drive"):
     print(f"Downloading the maps for {city_name}...")
     graph = ox.graph_from_place(city_name, network_type=network_type)
+    graph = ox.add_edge_lengths(graph)
     os.makedirs("data", exist_ok=True)
     ox.save_graphml(graph, "data/city.graphml") #ox.save_graphml() is used to save a street network graph to a file in GraphML format.
     print(f"Done. Nodes: {graph.number_of_nodes()}, Edges: {graph.number_of_edges()}")
