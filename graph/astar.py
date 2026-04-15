@@ -1,7 +1,6 @@
 import heapq
 import math
 
-from Buffer import graph
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000     #radius earth
     phi1= math.radians(lat1)     #converting latitute coordinates from degrees to radians
