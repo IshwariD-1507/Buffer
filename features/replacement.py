@@ -1,8 +1,7 @@
 import networkx as nx
-from graph.astar import astar  # reuse existing A*
+from graph.astar import astar
 
 
-# 🔹 Find the best ambulance (closest to emergency)
 def find_best_ambulance(graph, emergency_node, ambulances):
     best = None
     min_dist = float('inf')
@@ -19,7 +18,6 @@ def find_best_ambulance(graph, emergency_node, ambulances):
     return best
 
 
-# 🔹 Bidirectional Dijkstra to find optimal rendezvous point
 def find_rendezvous_point(graph, start, end):
     forward = nx.single_source_dijkstra_path_length(graph, start, weight='length')
     backward = nx.single_source_dijkstra_path_length(graph.reverse(copy=True), end, weight='length')
@@ -37,11 +35,9 @@ def find_rendezvous_point(graph, start, end):
     return best_node
 
 
-# 🔹 Handle ambulance distress and reroute using A*
 def handle_distress(graph, current_node, hospital):
     rendezvous = find_rendezvous_point(graph, current_node, hospital)
 
-    # Safety check
     if rendezvous is None:
         return [], [], None
 
