@@ -20,51 +20,63 @@ def get_fuel_nodes(graph, place="Pune, India"):
     return fuel_nodes
 
 
-# 🔹 Bitmask Dijkstra (state-space graph)
+# 🔹 Bitmask Dijkstra WITH PATH RECONSTRUCTION
 def shortest_path_with_waypoints(graph, start, end, waypoints):
 
-    # Handle no waypoints case
     if not waypoints:
-        return nx.shortest_path_length(graph, start, end, weight='length')
+        return nx.shortest_path(graph, start, end, weight='length')
 
     k = len(waypoints)
 
-    # (cost, current_node, visited_mask)
     pq = [(0, start, 0)]
     dist = {(start, 0): 0}
+    parent = {}
 
     while pq:
         cost, node, mask = heapq.heappop(pq)
 
-        # If all waypoints visited → go to end
+        # If all visited → go to end
         if mask == (1 << k) - 1:
             try:
-                return cost + nx.shortest_path_length(graph, node, end, weight='length')
+                final_path = nx.shortest_path(graph, node, end, weight='length')
+
+                # reconstruct previous path
+                path = []
+                cur = (node, mask)
+
+                while cur in parent:
+                    node_id, m = cur
+                    path.append(node_id)
+                    cur = parent[cur]
+
+                path.append(start)
+                path.reverse()
+
+                return path + final_path[1:]
+
             except:
                 continue
 
-        # Explore neighbors
         for neighbor in graph.neighbors(node):
             try:
                 edge_weight = min(
-                    graph[node][neighbor][edge_key]['length']
-                    for edge_key in graph[node][neighbor]
+                    graph[node][neighbor][key]['length']
+                    for key in graph[node][neighbor]
                 )
             except:
                 continue
 
             new_mask = mask
 
-            # Mark waypoint as visited if matched
             for i in range(k):
                 if neighbor == waypoints[i]:
                     new_mask |= (1 << i)
 
             new_cost = cost + edge_weight
 
-            # Relaxation step
             if (neighbor, new_mask) not in dist or dist[(neighbor, new_mask)] > new_cost:
                 dist[(neighbor, new_mask)] = new_cost
+                parent[(neighbor, new_mask)] = (node, mask)
                 heapq.heappush(pq, (new_cost, neighbor, new_mask))
 
-    return float("inf")
+    return []
