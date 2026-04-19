@@ -1,82 +1,187 @@
 import osmnx as ox
-import networkx as nx
 import heapq
 
+# ============================================================
+# features/waypoints.py  — T3
+# Waypoints with Bitmask DP + Dijkstra over augmented state
+# state = (current_node, bitmask of visited waypoints)
+# dist[node][mask] — run Dijkstra over this augmented state
+# for k waypoints: 2^k states per node
+# ============================================================
 
-# 🔹 Fetch petrol pumps and map to graph nodes
-def get_fuel_nodes(graph, place="Pune, India"):
-    tags = {"amenity": "fuel"}
-    gdf = ox.features_from_place(place, tags=tags)
+def get_petrol_pump_nodes(graph, city_name="Pune, India"):
+    """
+    Fetch all petrol pump locations from OSMnx and snap them
+    to the nearest nodes in the road graph.
 
-    fuel_nodes = []
-    for _, row in gdf.iterrows():
+    Returns a list of node IDs (from graph) that are closest
+    to actual petrol pump coordinates.
+    """
+    print(f"  Fetching petrol pumps for '{city_name}'...")
+    try:
+        pumps_gdf = ox.features_from_place(city_name, tags={"amenity": "fuel"})  # gets petrol pump POI data from OpenStreetMap
+    except Exception as e:
+        print(f"  [WARN] Could not fetch petrol pumps: {e}")
+        return []
+
+    pump_nodes = []  # will hold the list of nearest graph node IDs for each pump
+
+    for _, row in pumps_gdf.iterrows():
         try:
-            lat, lon = row.geometry.y, row.geometry.x
-            node = ox.distance.nearest_nodes(graph, lon, lat)
-            fuel_nodes.append(node)
-        except:
-            continue
+            geom = row.geometry
+            # For polygon shapes (like large petrol stations), use centroid
+            if geom.geom_type == "Point":
+                lat, lon = geom.y, geom.x   # extract lat/lon from Point geometry
+            else:
+                lat, lon = geom.centroid.y, geom.centroid.x  # extract lat/lon from centroid of polygon
+            # Snap the pump coordinate to the nearest road network node
+            nearest = ox.distance.nearest_nodes(graph, lon, lat)  # nearest_nodes(graph, X=lon, Y=lat)
+            pump_nodes.append(nearest)   # add the nearest road node to our list
+        except Exception:
+            continue   # skip any pump that can't be snapped (e.g. bad geometry)
 
-    return fuel_nodes
+    # Remove duplicate nodes (two pumps might snap to the same intersection)
+    unique_pump_nodes = []
+    seen = set()
+    for n in pump_nodes:
+        if n not in seen:
+            unique_pump_nodes.append(n)
+            seen.add(n)
+
+    print(f"  Found {len(unique_pump_nodes)} unique petrol pump nodes.")
+    return unique_pump_nodes
 
 
-# 🔹 Bitmask Dijkstra WITH PATH RECONSTRUCTION
-def shortest_path_with_waypoints(graph, start, end, waypoints):
+def dijkstra_with_waypoints(graph, start, end, waypoint_nodes, weight='weight'):
+    """
+    Dijkstra over an augmented state-space using bitmask DP.
 
-    if not waypoints:
-        return nx.shortest_path(graph, start, end, weight='length')
+    State  : (current_node, visited_mask)
+             visited_mask is a bitmask where bit i = 1 means waypoint i has been visited
+    dist   : dict mapping (node, mask) -> best known cost to reach that state
+    Goal   : reach `end` node with ALL waypoints visited (mask == full_mask)
 
-    k = len(waypoints)
+    Args:
+        graph         : road network (NetworkX MultiDiGraph)
+        start         : starting node ID
+        end           : destination node ID
+        waypoint_nodes: list of node IDs that must be visited (petrol pumps)
+        weight        : edge attribute to use as cost (default 'weight' from weights.py)
 
-    pq = [(0, start, 0)]
-    dist = {(start, 0): 0}
+    Returns:
+        path  : list of node IDs forming the shortest waypoint-covering route
+        dist  : total cost of the path
+    """
+    k = len(waypoint_nodes)           # number of waypoints
+    full_mask = (1 << k) - 1         # bitmask with all k bits set = all waypoints visited
+
+    # Map each waypoint node to its bit index for fast lookup
+    waypoint_index = {}               # {node_id: bit_position}
+    for i in range(k):
+        waypoint_index[waypoint_nodes[i]] = i
+
+    # dist[(node, mask)] = minimum cost to reach `node` having visited waypoints in `mask`
+    dist = {}
+
+    # parent[(node, mask)] = (prev_node, prev_mask) for path reconstruction
     parent = {}
 
+    # Priority queue entries: (cost, node, visited_mask)
+    start_mask = 0
+    # If the start node is itself a waypoint, mark it visited immediately
+    if start in waypoint_index:
+        start_mask = (1 << waypoint_index[start])
+
+    pq = [(0, start, start_mask)]     # (cost, node, mask)
+    dist[(start, start_mask)] = 0
+    parent[(start, start_mask)] = None
+
     while pq:
-        cost, node, mask = heapq.heappop(pq)
+        current_cost, current_node, current_mask = heapq.heappop(pq)  # pop lowest-cost state
 
-        # If all visited → go to end
-        if mask == (1 << k) - 1:
-            try:
-                final_path = nx.shortest_path(graph, node, end, weight='length')
+        # Early exit: reached destination with all waypoints visited
+        if current_node == end and current_mask == full_mask:
+            break
 
-                # reconstruct previous path
-                path = []
-                cur = (node, mask)
+        # Skip if we have already found a cheaper way to this state
+        if dist.get((current_node, current_mask), float('inf')) < current_cost:
+            continue
 
-                while cur in parent:
-                    node_id, m = cur
-                    path.append(node_id)
-                    cur = parent[cur]
+        # Explore all neighbours of current_node
+        for neighbor in graph.neighbors(current_node):
+            edge_data = graph.get_edge_data(current_node, neighbor)  # get all parallel edges between the two nodes
 
-                path.append(start)
-                path.reverse()
+            # Pick minimum edge weight among parallel edges (same as dijkstra.py pattern)
+            min_w = float('inf')
+            for d in edge_data.values():
+                w = d.get(weight, d.get('length', 1))  # fall back to 'length' if 'weight' not set yet
+                if w < min_w:
+                    min_w = w
 
-                return path + final_path[1:]
+            new_cost = current_cost + min_w  # total cost to reach neighbor via this edge
 
-            except:
-                continue
+            # Compute new mask: if neighbor is a waypoint, set its bit
+            new_mask = current_mask
+            if neighbor in waypoint_index:
+                new_mask = current_mask | (1 << waypoint_index[neighbor])  # bitwise OR sets the waypoint's bit
 
-        for neighbor in graph.neighbors(node):
-            try:
-                edge_weight = min(
-                    graph[node][neighbor][key]['length']
-                    for key in graph[node][neighbor]
-                )
-            except:
-                continue
+            state = (neighbor, new_mask)
 
-            new_mask = mask
+            # Relaxation: only update if this path is strictly cheaper
+            if new_cost < dist.get(state, float('inf')):
+                dist[state] = new_cost
+                parent[state] = (current_node, current_mask)  # remember where we came from
+                heapq.heappush(pq, (new_cost, neighbor, new_mask))  # push improved state to queue
 
-            for i in range(k):
-                if neighbor == waypoints[i]:
-                    new_mask |= (1 << i)
+    # --------------------------------------------------------
+    # Path reconstruction — trace back through parent map
+    # --------------------------------------------------------
+    # Find the best end state (end node with full mask visited)
+    best_cost = dist.get((end, full_mask), float('inf'))
 
-            new_cost = cost + edge_weight
+    if best_cost == float('inf'):
+        print("  [WARN] Could not find a route that visits all waypoints.")
+        print("         Falling back to direct Dijkstra (no waypoints).")
+        return _fallback_dijkstra(graph, start, end, weight)
 
-            if (neighbor, new_mask) not in dist or dist[(neighbor, new_mask)] > new_cost:
-                dist[(neighbor, new_mask)] = new_cost
-                parent[(neighbor, new_mask)] = (node, mask)
-                heapq.heappush(pq, (new_cost, neighbor, new_mask))
+    path = []
+    state = (end, full_mask)
+    while state is not None:
+        node, mask = state
+        path.append(node)           # collect nodes in reverse order
+        state = parent[state]
 
-    return []
+    path.reverse()  # reverse to get start -> end order
+    return path, best_cost
+
+
+def _fallback_dijkstra(graph, start, end, weight='weight'):
+    """
+    Plain Dijkstra fallback (mirrors graph/dijkstra.py exactly).
+    Used when not all waypoints can be visited.
+    """
+    pq = [(0, start)]
+    distances = {node: float('inf') for node in graph.nodes}
+    distances[start] = 0
+    parent = {node: None for node in graph.nodes}
+
+    while pq:
+        current_distance, current_node = heapq.heappop(pq)
+        if current_node == end:
+            break
+        for neighbor in graph.neighbors(current_node):
+            edge_data = graph.get_edge_data(current_node, neighbor)
+            min_weight = min([d.get(weight, d.get('length', 1)) for d in edge_data.values()])
+            new_dist = current_distance + min_weight
+            if new_dist < distances[neighbor]:
+                distances[neighbor] = new_dist
+                parent[neighbor] = current_node
+                heapq.heappush(pq, (new_dist, neighbor))
+
+    path = []
+    node = end
+    while node is not None:
+        path.append(node)
+        node = parent[node]
+    path.reverse()
+    return path, distances[end]
