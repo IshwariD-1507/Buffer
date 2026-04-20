@@ -1,207 +1,167 @@
+# ============================================================
+# run.py  — Developer Testing Pipeline
+# ============================================================
+
 from graph.loader import load_city_graph
-from graph.dijkstra import dijkstra
 from graph.weights import apply_composite_weights
+from graph.dijkstra import dijkstra
 from graph.astar import astar
-from map.render import plot_route
 
-import osmnx as ox
-
-# -----------------------
-# Load graph ONCE
-# -----------------------
-graph = load_city_graph()
-print("Graph loaded successfully!")
-
-# -----------------------
-# Coordinates (your example)
-# -----------------------
-start_point = (18.53, 73.86)
-end_point = (18.5208, 73.8554)
-
-# Convert to nearest nodes
-start_node = ox.distance.nearest_nodes(graph, start_point[1], start_point[0])
-end_node = ox.distance.nearest_nodes(graph, end_point[1], end_point[0])
-
-# -----------------------
-# Apply composite weights
-# -----------------------
-graph = apply_composite_weights(graph, mode="Rush Hour")
-
-# -----------------------
-# Run Dijkstra (with weight)
-# -----------------------
-path_dij, dist_dij = dijkstra(graph, start_node, end_node, weight='weight')
-
-# -----------------------
-# Run A* (IMPORTANT: 3 outputs)
-# -----------------------
-path_astar, dist_astar, explored = astar(graph, start_node, end_node, weight='weight')
-
-# -----------------------
-# Comparison
-# -----------------------
-print("\n===== COMPARISON =====")
-print("Dijkstra Distance:", dist_dij)
-print("A* Distance:", dist_astar)
-print("A* Nodes Explored:", explored)
-print("Dijkstra Path Length:", len(path_dij))
-
-# -----------------------
-# Plot A* route
-# -----------------------
-m = plot_route(graph, path_astar)
-
-# Save map
-m.save("route.html")
-print("Map saved as route.html")
-import heapq
-
-from graph.loader import load_city_graph
 from features.emergency import (
     get_hospital_nodes,
     bfs_radial_sweep,
     rank_hospitals,
     get_best_hospital,
 )
-from map.render_emergency import plot_emergency_route
+
+from features.reviews import add_review
+from features.waypoints import dijkstra_with_waypoints
+
+from map.render import plot_route, plot_emergency_route
+
+import osmnx as ox
 
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------
+# CONFIG
+# ------------------------------------------------------------
 
 CITY_NAME = "Pune, India"
-OUTPUT_FILE = "emergency_route.html"
 
-# BFS sweep radius — number of intersection hops to search for hospitals
-MAX_HOPS = 50
+START_POINT = (18.53, 73.86)
+END_POINT   = (18.5208, 73.8554)
 
-# ---------------------------------------------------------------------------
-# Main T2 Execution Flow
-# ---------------------------------------------------------------------------
+MODE = "Rush Hour"   # Normal / Rush Hour / Emergency
 
-def run_t2(ambulance_node=None):
-    """
-    Full T2 pipeline:
-        1. Load city graph
-        2. Resolve ambulance position
-        3. Fetch hospital nodes from OSM
-        4. BFS radial sweep to find nearby candidates
-        5. Reverse Dijkstra + composite scoring to rank hospitals
-        6. Select best hospital and render the route map
 
-    Args:
-        ambulance_node : Node ID for the ambulance's current position.
-                         If None, defaults to the first node in the graph.
-    """
-    print("=" * 60)
-    print("  T2 — Medical Emergency Mode")
-    print("=" * 60)
+# ------------------------------------------------------------
+# LOAD GRAPH
+# ------------------------------------------------------------
 
-    # ------------------------------------------------------------------
-    # Step 1: Load the city graph
-    # ------------------------------------------------------------------
-    print("\n[STEP 1] Loading city graph...")
-    graph = load_city_graph()
-    print(f"         Graph loaded: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
+print("\n[INIT] Loading graph...")
+graph = load_city_graph()
+print("[INIT] Graph loaded")
 
-    # ------------------------------------------------------------------
-    # Step 2: Resolve ambulance node
-    # ------------------------------------------------------------------
-    if ambulance_node is None:
-        # Default: pick the first node in the graph as a fallback
-        ambulance_node = list(graph.nodes)[0]
-        print(f"\n[STEP 2] No ambulance node specified — using default: {ambulance_node}")
-    else:
-        print(f"\n[STEP 2] Ambulance current position node: {ambulance_node}")
+# Apply weights once
+graph = apply_composite_weights(graph, mode=MODE)
 
-    if ambulance_node not in graph.nodes:
-        raise ValueError(f"Ambulance node {ambulance_node} is not present in the graph!")
 
-    # ------------------------------------------------------------------
-    # Step 3: Fetch hospital nodes from OSM
-    # ------------------------------------------------------------------
-    print(f"\n[STEP 3] Fetching hospital nodes for '{CITY_NAME}'...")
+# ------------------------------------------------------------
+# NODE CONVERSION
+# ------------------------------------------------------------
+
+start_node = ox.distance.nearest_nodes(graph, START_POINT[1], START_POINT[0])
+end_node   = ox.distance.nearest_nodes(graph, END_POINT[1], END_POINT[0])
+
+print(f"[INIT] Start Node: {start_node}")
+print(f"[INIT] End Node  : {end_node}")
+
+
+# ============================================================
+# 1. DIJKSTRA vs A*
+# ============================================================
+
+def test_shortest_path():
+    print("\n=== TEST: Dijkstra vs A* ===")
+
+    path_dij, dist_dij = dijkstra(graph, start_node, end_node, weight='weight')
+    path_astar, dist_astar, explored = astar(graph, start_node, end_node, weight='weight')
+
+    print(f"Dijkstra Distance : {dist_dij:.2f}")
+    print(f"A* Distance       : {dist_astar:.2f}")
+    print(f"A* Nodes Explored : {explored}")
+
+    m = plot_route(graph, path_astar)
+    m.save("route.html")
+    print("[MAP] Saved → route.html")
+
+
+# ============================================================
+# 2. EMERGENCY MODE (T2)
+# ============================================================
+
+def test_emergency():
+    print("\n=== TEST: Emergency Routing ===")
+
     hospital_nodes = get_hospital_nodes(graph, city_name=CITY_NAME)
 
-    if not hospital_nodes:
-        print("[ERROR] No hospital nodes found. Cannot continue T2 execution.")
-        return
-
-    # ------------------------------------------------------------------
-    # Step 4: BFS radial sweep
-    # ------------------------------------------------------------------
-    print(f"\n[STEP 4] Running BFS radial sweep (max_hops={MAX_HOPS})...")
-    candidate_hospitals = bfs_radial_sweep(
-        graph, ambulance_node, hospital_nodes, max_hops=MAX_HOPS
+    candidates = bfs_radial_sweep(
+        graph,
+        start_node,
+        hospital_nodes,
+        max_hops=50
     )
 
-    if not candidate_hospitals:
-        print("[ERROR] No candidate hospitals found within sweep radius.")
-        print("        Try increasing MAX_HOPS or check the ambulance node location.")
-        return
-
-    # ------------------------------------------------------------------
-    # Step 5: Rank hospitals with Reverse Dijkstra
-    # ------------------------------------------------------------------
-    print(f"\n[STEP 5] Ranking {len(candidate_hospitals)} candidate hospital(s)...")
-    pq = rank_hospitals(graph, ambulance_node, candidate_hospitals)
-
-    if not pq:
-        print("[ERROR] Hospital ranking returned no valid results.")
-        return
-
-    # ------------------------------------------------------------------
-    # Step 6: Select best hospital
-    # ------------------------------------------------------------------
-    print(f"\n[STEP 6] Selecting optimal hospital...")
+    pq = rank_hospitals(graph, start_node, candidates)
     best = get_best_hospital(pq)
 
-    if best is None:
-        print("[ERROR] Could not determine best hospital.")
-        return
+    if best:
+        plot_emergency_route(
+            graph,
+            best["path"],
+            candidates,
+            output_file="emergency_route.html"
+        )
+        print("[MAP] Saved → emergency_route.html")
 
-    # ------------------------------------------------------------------
-    # Step 7: Render the route map
-    # ------------------------------------------------------------------
-    print(f"\n[STEP 7] Rendering emergency route map...")
-    plot_emergency_route(
-        graph=graph,
-        path=best["path"],
-        candidate_hospitals=candidate_hospitals,
-        output_file=OUTPUT_FILE,
+
+# ============================================================
+# 3. REVIEWS IMPACT
+# ============================================================
+
+def test_reviews():
+    print("\n=== TEST: Reviews Impact ===")
+
+    # Run once before review
+    path1, dist1 = dijkstra(graph, start_node, end_node, weight='weight')
+
+    # Add pothole on first edge
+    if len(path1) > 1:
+        edge = (path1[0], path1[1])
+        print(f"[TEST] Adding pothole on edge {edge}")
+        add_review(edge, score=0.0, review_type="pothole")
+
+    # Run again
+    path2, dist2 = dijkstra(graph, start_node, end_node, weight='weight')
+
+    print(f"Before: {dist1:.2f}")
+    print(f"After : {dist2:.2f}")
+
+
+# ============================================================
+# 4. WAYPOINT ROUTING
+# ============================================================
+
+def test_waypoints():
+    print("\n=== TEST: Waypoints Routing ===")
+
+    # Dummy: pick first few nodes as waypoints
+    waypoint_nodes = list(graph.nodes)[:2]
+
+    path, dist = dijkstra_with_waypoints(
+        graph,
+        start_node,
+        end_node,
+        waypoint_nodes,
+        weight='weight'
     )
 
-    # ------------------------------------------------------------------
-    # Summary
-    # ------------------------------------------------------------------
-    print("\n" + "=" * 60)
-    print("  T2 EXECUTION COMPLETE")
-    print("=" * 60)
-    print(f"  Ambulance Node   : {ambulance_node}")
-    print(f"  Best Hospital    : {best['hosp_node']}")
-    print(f"  Travel Distance  : {best['travel_time']:.1f} m")
-    print(f"  Bed Score        : {best['bed_score']}/100")
-    print(f"  Composite Score  : {best['final_score']:.2f}")
-    print(f"  Route Length     : {len(best['path'])} nodes")
-    print(f"  Output Map       : {OUTPUT_FILE}")
-    print("=" * 60)
+    print(f"Waypoint Distance: {dist:.2f}")
 
-    return best
+    m = plot_route(graph, path)
+    m.save("waypoints_route.html")
+    print("[MAP] Saved → waypoints_route.html")
 
 
-# ---------------------------------------------------------------------------
-# Entry Point
-# ---------------------------------------------------------------------------
+# ============================================================
+# MAIN SWITCH (choose what to test)
+# ============================================================
 
 if __name__ == "__main__":
-    # -----------------------------------------------------------------
-    # Set your ambulance node ID here.
-    # To find a valid node near a specific coordinate, use:
-    #   import osmnx as ox
-    #   graph = load_city_graph()
-    #   node = ox.distance.nearest_nodes(graph, lon=73.8567, lat=18.5204)
-    # -----------------------------------------------------------------
-    AMBULANCE_NODE = None  # Replace with a real node ID, e.g. 1234567890
 
-    run_t2(ambulance_node=AMBULANCE_NODE)
+    # Uncomment what you want to test
+
+    test_shortest_path()
+    # test_emergency()
+    # test_reviews()
+    # test_waypoints()
