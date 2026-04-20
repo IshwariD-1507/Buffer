@@ -17,7 +17,7 @@ from features.replacement import handle_distress_signal
 from features.waypoints import get_petrol_pump_nodes, dijkstra_with_waypoints
 
 from map.render import plot_route
-from map.render_emergency import plot_emergency_route
+from map.render import plot_emergency_route
 
 
 # -----------------------------------------------------------
