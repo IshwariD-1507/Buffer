@@ -1,5 +1,8 @@
 import streamlit as st
 import osmnx as ox
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from graph.loader import load_city_graph
 from graph.weights import apply_composite_weights
