@@ -16,14 +16,14 @@ def dijkstra(graph, start, end, weight= 'length'):
                 distances[neighbor] = new_dist
                 parent[neighbor] = current_node
                 heapq.heappush(pq, (new_dist, neighbor))  #pushes the neighbor with the new distance into the priority queue
-            path= []
-            node= end
-            while node is not None:
-                path.append(node)
-                node= parent[node]
+    path= []
+    node= end
+    while node is not None:
+        path.append(node)
+        node= parent[node]
             
-            path.reverse()  #reverses the path to get the correct order from start to end
-        return path, distances[end]  #returns the shortest path and its total distance
+    path.reverse()  #reverses the path to get the correct order from start to end
+    return path, distances[end]  #returns the shortest path and its total distance
 
 
 

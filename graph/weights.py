@@ -1,21 +1,42 @@
 import random
-def apply_composite_weights(graph, mode="Normal"):      #graph is imported file and mode is how heavy the traffic is normal or rush hour etc        
-    for u, v, edge_data in graph.edges(data=True):     #loops through all the edges in the graph and gets the data associated with each edge
-        base_length= edge_data.get('length',1)  #gets the length of the edge, if not available defaults to 1
+from features.reviews import get_edge_penalty
 
-        if mode== "Normal":
-            traffic_mult= random.uniform(1, 1.5) #random multiplier for traffic between 1 and 1.5
-        elif mode== "Rush Hour":
-            traffic_mult= random.uniform(2, 3) #random multiplier for traffic between 1.5 and 2.5
+
+def apply_composite_weights(graph, mode="Normal"):
+    """
+    Adds a realistic weight to each edge by combining
+    distance, traffic, road conditions, and user reviews.
+    """
+
+    for u, v, edge_data in graph.edges(data=True):
+
+        # base distance of the road
+        base_length = edge_data.get('length', 1)
+
+        # simulate traffic conditions
+        if mode == "Normal":
+            traffic_mult = random.uniform(1, 1.5)
+        elif mode == "Rush Hour":
+            traffic_mult = random.uniform(2, 3)
         elif mode == "Emergency":
-            traffic_mult = random.uniform(1.2, 2) * 0.7  #random multiplier for traffic between 1.2 and 2, then reduced by 30% to simulate emergency conditions
+            # slightly relaxed traffic for emergency vehicles
+            traffic_mult = random.uniform(1.2, 2) * 0.7
         else:
             traffic_mult = 1
-        
-        crowd_penalty=random.uniform(0, 50)  #random penalty for crowd between 0 and 50
-        road_quality_penalty = random.uniform(0, 30)   #random penalty for road quality between 0 and 30
-        
-        edge_data["weight"] = base_length * traffic_mult + crowd_penalty + road_quality_penalty  #calculates the composite weight for the edge based on length, traffic multiplier, crowd penalty, and road quality penalty
 
-    return graph  #returns the graph with updated weights for each edge     
+        # random real-world factors
+        crowd_penalty = random.uniform(0, 50)
+        road_quality_penalty = random.uniform(0, 30)
 
+        # penalty from user reviews (potholes, traffic, etc.)
+        review_penalty = get_edge_penalty((u, v))
+
+        # final weight used by routing algorithms
+        edge_data["weight"] = (
+            base_length * traffic_mult
+            + crowd_penalty
+            + road_quality_penalty
+            + review_penalty
+        )
+
+    return graph
