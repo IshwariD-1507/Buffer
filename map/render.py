@@ -61,3 +61,31 @@ def plot_route_with_reviews(graph, path):
                   icon=folium.Icon(color="red")).add_to(m)
 
     return m
+
+def plot_emergency_route(graph, path, hospital_nodes):
+    if not path:
+        return None
+    
+    route_coords = [(graph.nodes[node]['y'], graph.nodes[node]['x']) for node in path]
+    start_lat, start_lon = route_coords[0]
+    
+    m = folium.Map(location=[start_lat, start_lon], zoom_start=13)
+    
+    folium.PolyLine(route_coords, color="red", weight=6).add_to(m)
+    
+    folium.Marker(route_coords[0], tooltip="Ambulance", 
+                  icon=folium.Icon(color="blue")).add_to(m)
+    
+    folium.Marker(route_coords[-1], tooltip="Best Hospital", 
+                  icon=folium.Icon(color="red", icon="plus")).add_to(m)
+    
+    for node in hospital_nodes:
+        try:
+            lat = graph.nodes[node]['y']
+            lon = graph.nodes[node]['x']
+            folium.Marker([lat, lon], tooltip="Nearby Hospital", 
+                          icon=folium.Icon(color="green", icon="plus")).add_to(m)
+        except:
+            continue
+    
+    return m
