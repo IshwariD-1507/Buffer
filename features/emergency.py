@@ -70,9 +70,8 @@ def bfs_radial_sweep(graph, start_node, hospital_nodes, max_hops=50):
     print(f"[T2] BFS complete. {len(candidate_hospitals)} candidate(s).")
     return candidate_hospitals
 
-
 # -----------------------------------------------------------
-# 3. Rank hospitals using reverse Dijkstra
+# 3. Rank hospitals using ONE-TO-ALL Dijkstra (Optimized)
 # -----------------------------------------------------------
 
 def rank_hospitals(graph, ambulance_node, candidate_hospitals):
@@ -82,27 +81,31 @@ def rank_hospitals(graph, ambulance_node, candidate_hospitals):
 
     print(f"[T2] Ranking {len(candidate_hospitals)} hospital(s)...")
 
-    reversed_graph = graph.reverse(copy=True)
+    # We no longer need to reverse the graph! 
+    # We just run our new function EXACTLY ONCE from the ambulance's location.
+    from graph.dijkstra import dijkstra_all
+    distances, parents = dijkstra_all(graph, ambulance_node, weight='weight')
 
     pq = []
 
     for hosp_node in candidate_hospitals:
         try:
-            # run Dijkstra (IMPORTANT: use composite weight)
-            path, travel_dist = dijkstra(
-                reversed_graph,
-                hosp_node,
-                ambulance_node,
-                weight='weight'
-            )
-
-            if path is None or travel_dist == float('inf'):
+            # Look up the distance instantly (no recalculation needed)
+            travel_dist = distances.get(hosp_node, float('inf'))
+            
+            if travel_dist == float('inf'):
                 continue
 
-            actual_path = path[::-1]
+            # Reconstruct the specific path from the ambulance to this hospital
+            actual_path = []
+            curr = hosp_node
+            while curr is not None:
+                actual_path.append(curr)
+                curr = parents[curr]
+            actual_path.reverse()
 
             # simulate bed availability
-            random.seed(hosp_node)  # keeps results consistent
+            random.seed(hosp_node)
             bed_score = random.randint(1, 100)
 
             # lower score = better
@@ -125,7 +128,6 @@ def rank_hospitals(graph, ambulance_node, candidate_hospitals):
 
     print(f"[T2] Ranking complete. {len(pq)} valid hospital(s).")
     return pq
-
 
 # -----------------------------------------------------------
 # 4. Pick best hospital

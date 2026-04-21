@@ -8,7 +8,7 @@ def download_city(city_name, network_type="drive"):
     print(f"Downloading map for {city_name}...")
 
     graph = ox.graph_from_place(city_name, network_type=network_type)
-    graph = ox.add_edge_lengths(graph)
+    #graph = ox.add_edge_lengths(graph)
 
     os.makedirs("data", exist_ok=True)
 

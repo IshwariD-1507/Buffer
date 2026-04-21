@@ -39,7 +39,7 @@ MODE = "Rush Hour"   # Normal / Rush Hour / Emergency
 # ------------------------------------------------------------
 
 print("\n[INIT] Loading graph...")
-graph = load_city_graph()
+graph = load_city_graph(CITY_NAME)
 print("[INIT] Graph loaded")
 
 # Apply weights once

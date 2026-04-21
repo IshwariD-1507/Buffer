@@ -1,5 +1,7 @@
 import heapq
 import math
+# 80 km/h in meters per second
+MAX_SPEED_METERS_PER_SECOND = 22.2
 
 
 def haversine(lat1, lon1, lat2, lon2):
@@ -73,9 +75,9 @@ def astar(graph, start, end, weight='weight'):
                 lat2 = graph.nodes[end]['y']
                 lon2 = graph.nodes[end]['x']
 
-                h = haversine(lat1, lon1, lat2, lon2)
-
-                f = tentative_g + h
+                h_dist = haversine(lat1, lon1, lat2, lon2)
+                h_time = h_dist / MAX_SPEED_METERS_PER_SECOND # Convert meters to minimum possible time
+                f = tentative_g + h_time
 
                 heapq.heappush(pq, (f, neighbor))
 
