@@ -62,39 +62,32 @@ def plot_route_with_reviews(graph, path):
 
     return m
 
-def plot_emergency_route(graph, path, candidate_nodes, hospital_data):
-    if not path: return None
+def plot_emergency_route(graph, path, hospital_nodes):
+    if not path:
+        return None
     
     route_coords = [(graph.nodes[node]['y'], graph.nodes[node]['x']) for node in path]
     start_lat, start_lon = route_coords[0]
     
     m = folium.Map(location=[start_lat, start_lon], zoom_start=13)
+    
     folium.PolyLine(route_coords, color="red", weight=6).add_to(m)
     
-    folium.Marker(route_coords[0], tooltip="Ambulance Start", 
+    folium.Marker(route_coords[0], tooltip="Ambulance", 
                   icon=folium.Icon(color="blue")).add_to(m)
     
-    # Grab the best hospital's name for the final marker
-    best_hosp_node = path[-1]
-    best_name = hospital_data.get(best_hosp_node, "Best Hospital")
-    
-    folium.Marker(route_coords[-1], tooltip=f"Best Route: {best_name}", 
+    folium.Marker(route_coords[-1], tooltip="Best Hospital", 
                   icon=folium.Icon(color="red", icon="plus")).add_to(m)
     
-    # Plot the other nearby candidate hospitals
-    for node in candidate_nodes:
-        if node == best_hosp_node: 
-            continue # Don't overwrite our main red marker
-            
+    for node in hospital_nodes:
         try:
-            lat, lon = graph.nodes[node]['y'], graph.nodes[node]['x']
-            name = hospital_data.get(node, "Nearby Hospital")
-            
-            folium.Marker([lat, lon], tooltip=name, 
+            lat = graph.nodes[node]['y']
+            lon = graph.nodes[node]['x']
+            folium.Marker([lat, lon], tooltip="Nearby Hospital", 
                           icon=folium.Icon(color="green", icon="plus")).add_to(m)
         except:
             continue
-            
+    
     return m
 
 def plot_waypoint_route(graph, path, waypoint_nodes):

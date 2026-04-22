@@ -24,20 +24,6 @@ import heapq
 # ============================================================
 # PART 1 — Distress Signal Handler
 # ============================================================
-def get_street_name(graph, node_id):
-    """Extracts the street name connected to a specific node."""
-    try:
-        # Look at all the edges (roads) connected to this node
-        for u, v, data in graph.edges(node_id, data=True):
-            if 'name' in data:
-                # Sometimes OSM returns a list of names if roads merge
-                if isinstance(data['name'], list):
-                    return data['name'][0]
-                return data['name']
-    except Exception:
-        pass
-    
-    return "Unknown Street"
 
 def handle_distress_signal(graph, current_node, destination_node, weight='weight'):
     """

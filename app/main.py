@@ -131,44 +131,28 @@ if st.button("Run"):
     # =======================================================
     elif mode == "Waypoints":
 
-        with st.spinner("Fetching petrol pumps near your route..."):
-            pumps = get_petrol_pump_nodes(graph, city_context)
+        pumps = get_petrol_pump_nodes(graph, city_context)
 
         if len(pumps) == 0:
-            st.warning("No petrol pumps found in this area.")
+            st.warning("No petrol pumps found.")
             st.stop()
 
-        st.success(f"Found {len(pumps)} petrol pumps near your route.")
+        num = st.slider("Number of stops", 1, min(5, len(pumps)), 2)
 
-        # ✅ KEEP slider OUTSIDE any button
-        max_points = min(5, len(pumps))  # keep safe upper bound
-        num = st.slider("Number of petrol pump stops", 1, max_points, 3)
+        selected = pumps[:num]   # simple selection (can be improved later)
 
-        selected = pumps[:num]
+        path, dist = dijkstra_with_waypoints(
+            graph,
+            start_node,
+            end_node,
+            selected,
+            weight='weight'
+        )
 
-        if st.button("Run Waypoint Routing"):
+        st.success(f"Distance with stops: {dist:.2f}")
 
-            st.info(f"Routing through {num} petrol pump stops using Bitmask DP Dijkstra...")
-
-            with st.spinner("Calculating route with waypoints..."):
-                path, dist = dijkstra_with_waypoints(
-                    graph,
-                    start_node,
-                    end_node,
-                    selected,
-                    weight='weight'
-                )
-
-            if not path:
-                st.error("Could not find a route through all petrol pumps.")
-                st.stop()
-
-            st.success(f"Route found. Total distance: {dist:.2f} metres")
-            st.write(f"Route passes through {num} petrol pump stops.")
-            st.write(f"Total nodes in path: {len(path)}")
-
-            m = plot_route(graph, path)
-            st.components.v1.html(m._repr_html_(), height=500)
+        m = plot_route(graph, path)
+        st.components.v1.html(m._repr_html_(), height=500)
 
 
     # =======================================================
@@ -202,7 +186,7 @@ if st.button("Run"):
 
 from features.waypoints   import get_petrol_pump_nodes, dijkstra_with_waypoints
 from features.replacement import handle_distress_signal, find_rendezvous_node
-from map.render        import plot_waypoint_route, plot_replacement_route
+from map.render_t3        import plot_waypoint_route, plot_replacement_route
 
 
 def run_t3(graph, start_node, end_node):

@@ -83,31 +83,25 @@ def test_shortest_path():
 def test_emergency():
     print("\n=== TEST: Emergency Routing ===")
 
-    # This is now a dictionary, not just a set!
-    hospital_data = get_hospital_nodes(graph, city_name=CITY_NAME)
+    hospital_nodes = get_hospital_nodes(graph, city_name=CITY_NAME)
 
     candidates = bfs_radial_sweep(
         graph,
         start_node,
-        hospital_data, 
+        hospital_nodes,
         max_hops=50
     )
 
-    # Pass the dictionary into our updated ranker
-    pq = rank_hospitals(graph, start_node, candidates, hospital_data)
+    pq = rank_hospitals(graph, start_node, candidates)
     best = get_best_hospital(pq)
 
     if best:
-        # Pass the dictionary into our map renderer
-        m = plot_emergency_route(
+        plot_emergency_route(
             graph,
             best["path"],
             candidates,
-            hospital_data
+            output_file="emergency_route.html"
         )
-        
-        # Save the map!
-        m.save("emergency_route.html")
         print("[MAP] Saved → emergency_route.html")
 
 
