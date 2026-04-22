@@ -70,10 +70,6 @@ def bfs_radial_sweep(graph, start_node, hospital_nodes, max_hops=50):
     print(f"[T2] BFS complete. {len(candidate_hospitals)} candidate(s).")
     return candidate_hospitals
 
-# -----------------------------------------------------------
-# 3. Rank hospitals using ONE-TO-ALL Dijkstra (Optimized)
-# -----------------------------------------------------------
-
 def rank_hospitals(graph, ambulance_node, candidate_hospitals):
     if not candidate_hospitals:
         print("[T2] No hospitals to rank.")
